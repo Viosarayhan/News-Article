@@ -11,36 +11,84 @@ export default function App() {
   const [theme, setTheme] = useState("dark");
   const [category, setCategory] = useState("");
 
-useEffect(() => {
-  const fetchNews = async () => {
-    setLoading(true);
-    setError("");
+  // ✅ API Sources (utamakan NewsAPI yang pasti jalan)
+  const sources = [
+    `https://newsapi.org/v2/everything?q=artificial%20intelligence&apiKey=beadce4cc4d24849b7c543427dc7c7bd`,
+    `https://api.currentsapi.services/v1/search?keywords=artificial intelligence&apiKey=Ok2ImJnEegDTUdozzAqa1W03QDDq4oo9b5GgtErTzmV5iKeN`,
+    `https://gnews.io/api/v4/search?q=artificial%20intelligence&lang=en&token=8f4e6904c8c6062c6828aa1d97876c4e`
+  ];
 
-    try {
-      const res = await fetch("/api/news"); // 🔥 backend kita sendiri
-      if (!res.ok) throw new Error("API failed");
-      const data = await res.json();
+  useEffect(() => {
+    const fetchNews = async () => {
+      setLoading(true);
+      setError("");
+      let news = [];
 
-      if (data.articles) {
-        setAllNews(data.articles);
-        setFilteredNews(data.articles);
-
-        localStorage.setItem("cachedNews", JSON.stringify({
-          data: data.articles,
-          timestamp: Date.now()
-        }));
-      } else {
-        setError("⚠️ No news found.");
+      // ✅ Cek cache dulu
+      const cache = localStorage.getItem("cachedNews");
+      if (cache) {
+        const parsed = JSON.parse(cache);
+        const age = (Date.now() - parsed.timestamp) / 1000; // detik
+        if (age < 300) { // Cache valid 5 menit
+          setAllNews(parsed.data);
+          setFilteredNews(parsed.data);
+          setLoading(false);
+          return; // ✅ Skip fetch API
+        }
       }
-    } catch (err) {
-      setError("⚠️ Failed to fetch news. Please try again later.");
-    }
-    setLoading(false);
-  };
 
-  fetchNews();
-}, []);
+      try {
+        for (let url of sources) {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) continue; // skip API yang error
+            const data = await res.json();
 
+            if (data.articles) {
+              data.articles.forEach((a) =>
+                news.push({
+                  title: a.title,
+                  url: a.url,
+                  publishedAt: a.publishedAt || a.published || new Date(),
+                })
+              );
+            }
+            if (data.news) {
+              data.news.forEach((a) =>
+                news.push({
+                  title: a.title,
+                  url: a.url,
+                  publishedAt: a.published || new Date(),
+                })
+              );
+            }
+          } catch (err) {
+            console.warn("Skipping API:", url, err.message);
+          }
+        }
+
+        news.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+
+        if (news.length > 0) {
+          setAllNews(news);
+          setFilteredNews(news);
+
+          // ✅ Simpan cache
+          localStorage.setItem("cachedNews", JSON.stringify({
+            data: news,
+            timestamp: Date.now()
+          }));
+        } else {
+          setError("⚠️ Failed to fetch news. Please try again later.");
+        }
+      } catch (err) {
+        setError("⚠️ Failed to fetch news. Please try again later.");
+      }
+      setLoading(false);
+    };
+
+    fetchNews();
+  }, []);
 
   useEffect(() => {
     let news = allNews;
